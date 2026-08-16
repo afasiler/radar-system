@@ -1,0 +1,17 @@
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
+.env
+
+# Node / React
+flight-tracker/node_modules/
+flight-tracker/dist/
+flight-tracker/.env
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

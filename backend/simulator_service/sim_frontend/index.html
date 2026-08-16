@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>✈ Simülatör (Mini Frontend)</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 380px;
+      min-width: 380px;
+      background: #1a1d27;
+      border-right: 1px solid #2d3148;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 16px;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+
+    .header { border-bottom: 1px solid #2d3148; padding-bottom: 16px; }
+    .header h1 { font-size: 16px; font-weight: 700; color: #fff; }
+    .header p  { font-size: 11px; color: #64748b; margin-top: 3px; }
+
+    .section-label {
+      font-size: 10px; font-weight: 700; color: #64748b;
+      letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 8px;
+    }
+
+    .speed-btns { display: flex; gap: 6px; margin-bottom: 8px; }
+    .speed-btn {
+      flex: 1; padding: 7px 4px;
+      border: 1px solid #2d3148; border-radius: 6px;
+      background: #252836; color: #94a3b8;
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .speed-btn:hover { border-color: #4f6ef7; color: #fff; }
+    .speed-btn.active { background: #4f6ef7; border-color: #4f6ef7; color: #fff; }
+
+    .action-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1; padding: 11px 8px; border: none; border-radius: 9px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; display: flex; align-items: center;
+      justify-content: center; gap: 6px;
+    }
+    .btn-start { background: #22c55e; color: #fff; }
+    .btn-start:hover { background: #16a34a; }
+    .btn-reset { background: #334155; color: #94a3b8; }
+    .btn-reset:hover { background: #475569; color: #fff; }
+
+    .flights-list { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+    .empty-state { color: #475569; font-size: 12px; text-align: center; padding: 24px 0; }
+
+    .flight-card {
+      background: #252836; border: 1px solid #2d3148;
+      border-radius: 9px; padding: 12px;
+    }
+    .flight-card.landed { border-color: #ca8a04; }
+
+    .flight-top {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 8px;
+    }
+    .flight-id { font-weight: 700; font-size: 14px; }
+
+    .badge {
+      font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+    }
+    .badge-running { background: #14532d; color: #4ade80; }
+    .badge-landed  { background: #451a03; color: #fb923c; }
+    .badge-stopped { background: #334155; color: #94a3b8; }
+
+    .small-btn {
+      background: none; border: 1px solid #4f6ef7; color: #4f6ef7;
+      border-radius: 5px; padding: 3px 8px; font-size: 10px; font-weight: bold;
+      cursor: pointer; transition: all 0.12s;
+    }
+    .small-btn:hover { background: #4f6ef7; color: #fff; }
+    .stop-btn { border-color: #ef4444; color: #ef4444; }
+    .stop-btn:hover { background: #ef4444; color: #fff; }
+
+    .progress-bar-bg {
+      background: #1e2130; border-radius: 99px;
+      height: 5px; overflow: hidden; margin-bottom: 6px;
+    }
+    .progress-bar-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, #4f6ef7, #38bdf8);
+      transition: width 0.8s ease;
+    }
+    .flight-card.landed .progress-bar-fill { background: linear-gradient(90deg, #f59e0b, #fb923c); }
+
+    .flight-meta {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: #64748b;
+    }
+
+    .conn-bar {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; color: #64748b;
+      border-top: 1px solid #2d3148; padding-top: 12px; margin-top: auto;
+    }
+    .conn-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .conn-ok  { background: #22c55e; animation: pulse-dot 2s infinite; }
+    .conn-err { background: #ef4444; }
+
+    @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+    .map-container { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    .leaflet-tile { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7); }
+    .map-label {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; background: rgba(15,17,23,0.85);
+      color: #94a3b8; font-size: 11px; font-family: 'Inter', sans-serif;
+      padding: 4px 12px; border-radius: 20px; pointer-events: none;
+      backdrop-filter: blur(4px); border: 1px solid #2d3148;
+    }
+    .plane-label {
+      background: transparent; border: none; color: white;
+      font-weight: bold; font-family: 'Inter', sans-serif;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8); box-shadow: none;
+    }
+    .leaflet-tooltip-top:before { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="header">
+    <h1>✈ Simülatör (Mini Frontend)</h1>
+    <p>localhost:8001</p>
+  </div>
+
+  <div style="margin-top: 10px;">
+    <div class="section-label">Simüle Edilecek Uçuş</div>
+    <select id="flight-select" onchange="onSelectChange()" style="width: 100%; padding: 8px; background: #252836; border: 1px solid #2d3148; color: white; border-radius: 6px; outline: none; margin-bottom: 10px;">
+      <option value="ALL">Tüm Uçuşlar</option>
+    </select>
+  </div>
+
+  <div id="controls-container" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+    <!-- Rendered by JS -->
+  </div>
+
+  <div class="conn-bar" style="margin-top: auto;">
+    <span class="conn-dot conn-ok" id="conn-dot"></span>
+    <span id="conn-text">Bağlanıyor...</span>
+  </div>
+</div>
+
+<div class="map-container">
+  <div class="map-label">Simülatör Canlı İzleme</div>
+  <div id="map"></div>
+</div>
+
+<script>
+  const SIM_BASE    = 'http://localhost:8001';
+  const PLAN_BASE   = 'http://localhost:8000';
+
+  let globalSpeed = 1;
+  let allFlightsDB = [];
+  const flightLayers = {};
+  let latestStatusMap = {};
+  let selectedSimId = "ALL";
+
+  function onSelectChange() {
+    selectedSimId = document.getElementById("flight-select").value;
+    renderControls();
+  }
+
+  function renderControls() {
+    const container = document.getElementById("controls-container");
+
+    if (selectedSimId === "ALL") {
+      container.innerHTML = `
+        <div class="section-label">Tümünü Başlat Hızı</div>
+        <div class="speed-btns">
+          <button class="speed-btn global-speed ${globalSpeed===1?'active':''}" data-speed="1" onclick="setGlobalSpeed(1)">1x</button>
+          <button class="speed-btn global-speed ${globalSpeed===10?'active':''}" data-speed="10" onclick="setGlobalSpeed(10)">10x</button>
+          <button class="speed-btn global-speed ${globalSpeed===50?'active':''}" data-speed="50" onclick="setGlobalSpeed(50)">50x</button>
+        </div>
+        <div class="action-row">
+          <button class="btn btn-start" onclick="startAll()">▶ Tümünü Başlat</button>
+          <button class="btn btn-reset" onclick="resetAll()">↺ Sıfırla</button>
+        </div>
+      `;
+    } else {
+      const f = allFlightsDB.find(x => x.id === selectedSimId);
+      if (!f) return;
+
+      const sim = latestStatusMap[selectedSimId];
+      const isRunning = sim && sim.status === 'running';
+      const isLanded = sim && sim.status === 'landed';
+      const progress = sim ? sim.progress : 0;
+
+      const remaining_sec = (sim && progress > 0 && progress < 100) ? Math.round((sim.elapsed_sec / progress) * (100 - progress)) : 0;
+      const eta_text = isLanded ? '0s' : (isRunning ? formatTime(remaining_sec) : '-');
+
+      let badgeHTML = `<span class="badge badge-stopped">Bekliyor</span>`;
+      if (isRunning) badgeHTML = `<span class="badge badge-running">Uçuşta</span>`;
+      if (isLanded) badgeHTML = `<span class="badge badge-landed">İndi</span>`;
+
+      let actionBtns = '';
+      if (isRunning) {
+        actionBtns = `<button class="btn btn-reset" onclick="stopOne('${f.id}')">⏹ Durdur</button>`;
+      } else {
+        actionBtns = `<button class="btn btn-start" onclick="startOne('${f.id}')">▶ Başlat</button>`;
+      }
+      actionBtns += `<button class="btn btn-reset" onclick="resetOne('${f.id}')">↺ Sıfırla</button>`;
+
+      let speedBtns = '';
+      if (isRunning) {
+        const sp = sim.speed || 1;
+        speedBtns = `
+          <div class="section-label" style="margin-top:15px;">Hız Kontrolü</div>
+          <div class="speed-btns">
+            <button class="speed-btn ${sp===1?'active':''}" onclick="setOneSpeed('${f.id}', 1)">1x</button>
+            <button class="speed-btn ${sp===10?'active':''}" onclick="setOneSpeed('${f.id}', 10)">10x</button>
+            <button class="speed-btn ${sp===50?'active':''}" onclick="setOneSpeed('${f.id}', 50)">50x</button>
+          </div>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="flight-card ${isLanded ? 'landed' : ''}">
+          <div class="flight-top">
+            <span class="flight-id">✈ ${f.id}</span>
+            <div>${badgeHTML}</div>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width:${progress}%"></div>
+          </div>
+          <div class="flight-meta">
+            <span>Adım: ${sim ? sim.step + '/' + sim.total_steps : '-'}</span>
+            <span>%${progress}</span>
+            <span>⏱ Geçen: ${sim ? formatTime(sim.elapsed_sec) : '-'}</span>
+            <span>Varış: ${eta_text}</span>
+          </div>
+        </div>
+        <div class="action-row" style="margin-top: 15px;">
+          ${actionBtns}
+        </div>
+        ${speedBtns}
+      `;
+    }
+  }
+
+  function calculateBearing(startLat, startLng, destLat, destLng) {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const toDeg = (rad) => (rad * 180) / Math.PI;
+    const y = Math.sin(toRad(destLng) - toRad(startLng)) * Math.cos(toRad(destLat));
+    const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
+              Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng) - toRad(startLng));
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  function greatCirclePoints(lat1_deg, lon1_deg, lat2_deg, lon2_deg, n_steps) {
+    const toRad = deg => deg * Math.PI / 180;
+    const toDeg = rad => rad * 180 / Math.PI;
+    const lat1 = toRad(lat1_deg), lon1 = toRad(lon1_deg), lat2 = toRad(lat2_deg), lon2 = toRad(lon2_deg);
+    const dlat = lat2 - lat1, dlon = lon2 - lon1;
+    const a = Math.sin(dlat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlon / 2) ** 2;
+    const d = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+    if (d < 1e-10) return Array(n_steps + 1).fill([lat1_deg, lon1_deg]);
+    const points = [];
+    for (let i = 0; i <= n_steps; i++) {
+      const f = i / n_steps;
+      const A = Math.sin((1 - f) * d) / Math.sin(d);
+      const B = Math.sin(f * d) / Math.sin(d);
+      const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+      const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+      const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+      points.push([toDeg(Math.atan2(z, Math.sqrt(x ** 2 + y ** 2))), toDeg(Math.atan2(y, x))]);
+    }
+    return points;
+  }
+
+  const map = L.map('map', { zoomControl: false }).setView([39.0, 35.0], 6);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+
+  function createPlaneIcon(color = '#4f6ef7', bearing = 0) {
+    return L.divIcon({
+      html: `<div style="transform:rotate(${bearing}deg);width:24px;height:24px;display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" width="22" height="22">
+          <path fill="${color}" stroke="white" stroke-width="1" d="M21,16v-2l-8-5V3.5C13,2.67,12.33,2,11.5,2S10,2.67,10,3.5V9l-8,5v2l8-2.5V19l-2,1.5V22l3.5-1l3.5,1v-1.5L13,19v-5.5L21,16z"/>
+        </svg></div>`,
+      iconSize: [24,24], iconAnchor: [12,12], className: '',
+    });
+  }
+
+  const dotIcon = (color) => L.divIcon({
+    html: `<div style="width:8px;height:8px;background:${color};border:2px solid #1a1d27;border-radius:50%;"></div>`,
+    iconSize:[8,8], iconAnchor:[4,4], className:'',
+  });
+
+  async function loadFlightRoutes() {
+    try {
+      const res = await fetch(`${PLAN_BASE}/api/flights`);
+      allFlightsDB = await res.json();
+
+      const select = document.getElementById('flight-select');
+      let opts = '<option value="ALL">Tüm Uçuşlar</option>';
+      allFlightsDB.forEach(f => {
+        opts += `<option value="${f.id}">✈ ${f.id}</option>`;
+      });
+      const currentVal = select.value;
+      select.innerHTML = opts;
+      if (allFlightsDB.find(f => f.id === currentVal) || currentVal === 'ALL') {
+         select.value = currentVal;
+      } else {
+         selectedSimId = 'ALL';
+         select.value = 'ALL';
+      }
+
+      allFlightsDB.forEach(f => {
+        if (flightLayers[f.id]) return;
+        const allPoints = [f.origin, ...(f.waypoints || []), f.destination];
+        const routeLatlngs = [];
+        for (let i = 0; i < allPoints.length - 1; i++) {
+          routeLatlngs.push(...greatCirclePoints(allPoints[i][0], allPoints[i][1], allPoints[i+1][0], allPoints[i+1][1], 50));
+        }
+
+        const polyline = L.polyline(routeLatlngs, { color: '#4f6ef7', weight: 2, dashArray: '6 6', opacity: 0.6 }).addTo(map);
+        const originMarker = L.marker(f.origin, { icon: dotIcon('#22c55e') }).addTo(map);
+        const destMarker = L.marker(f.destination, { icon: dotIcon('#ef4444') }).addTo(map);
+        const planeMarker = L.marker(f.origin, { icon: createPlaneIcon('#94a5a6', 0) })
+          .bindTooltip(f.id, { permanent: true, direction: 'top', offset: [0, -14], className: 'plane-label' }).addTo(map);
+
+        flightLayers[f.id] = { polyline, originMarker, destMarker, planeMarker, lastPos: f.origin, lastBearing: 0 };
+      });
+    } catch(e) {}
+  }
+
+  // Bir uçuşu simülatör haritasında (sadece görsel) origin'e taşır.
+  // Ana backend'e hiç dokunmaz — 5173 bundan habersizdir.
+  function moveToOrigin(f) {
+    const layer = flightLayers[f.id];
+    if (!layer) return;
+    const firstTarget = (f.waypoints && f.waypoints.length > 0) ? f.waypoints[0] : f.destination;
+    const bearing = calculateBearing(f.origin[0], f.origin[1], firstTarget[0], firstTarget[1]);
+    layer.lastPos = f.origin;
+    layer.lastBearing = bearing;
+    layer.planeMarker.setLatLng(f.origin);
+    layer.planeMarker.setIcon(createPlaneIcon('#94a5a6', Math.round(bearing)));
+  }
+
+  async function updatePlanePositions() {
+    try {
+      // Ana backend'e değil, simülatörün kendi (sıfırlamayı da hesaba katan) konum
+      // ucuna bakıyoruz — 5173'ün kaynağı olan ana backend'e hiç dokunulmuyor.
+      const res = await fetch(`${SIM_BASE}/simulations/positions`);
+      const positions = await res.json();
+      positions.forEach(p => {
+        const layer = flightLayers[p.flight_id];
+        if (!layer) return;
+
+        const pos = p.position;
+
+        if (layer.lastPos[0] !== pos[0] || layer.lastPos[1] !== pos[1]) {
+           layer.lastBearing = calculateBearing(layer.lastPos[0], layer.lastPos[1], pos[0], pos[1]);
+        }
+        layer.lastPos = pos;
+        layer.planeMarker.setLatLng(pos);
+        // We will update the color in the poll() loop based on status
+      });
+    } catch(e) {}
+  }
+
+  async function setGlobalSpeed(val) {
+    globalSpeed = val;
+    await fetch(`${SIM_BASE}/simulations/speed?speed=${val}`, { method: 'POST' }).catch(e=>console.log(e));
+    renderControls();
+  }
+
+  async function startAll() {
+    await fetch(`${SIM_BASE}/simulations/start?speed=${globalSpeed}`, { method: 'POST' });
+  }
+
+  async function resetAll() {
+    if (!confirm('Sıfırlamak istiyor musunuz?')) return;
+    await fetch(`${SIM_BASE}/simulations/reset`, { method: 'POST' });
+    // Bir sonraki poll'u (en fazla 1sn) beklemeden anında görsel geri bildirim.
+    allFlightsDB.forEach(f => moveToOrigin(f));
+    renderControls();
+  }
+
+  async function resetOne(flightId) {
+    await fetch(`${SIM_BASE}/simulations/${flightId}/reset`, { method: 'POST' });
+    const f = allFlightsDB.find(x => x.id === flightId);
+    if (f) moveToOrigin(f);
+    renderControls();
+  }
+
+  async function startOne(flightId) {
+    await fetch(`${SIM_BASE}/simulations/${flightId}/start?speed=${globalSpeed}`, { method: 'POST' });
+  }
+
+  async function stopOne(flightId) {
+    await fetch(`${SIM_BASE}/simulations/${flightId}/stop`, { method: 'POST' });
+  }
+
+  async function setOneSpeed(flightId, speed) {
+    await fetch(`${SIM_BASE}/simulations/${flightId}/speed?speed=${speed}`, { method: 'POST' });
+  }
+
+  function formatTime(sec) {
+    if (!sec && sec !== 0) return '-';
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m > 0 ? `${m}dk ${s}s` : `${s}s`;
+  }
+
+  async function poll() {
+    try {
+      const res  = await fetch(`${SIM_BASE}/simulations/status`);
+      const activeList = await res.json();
+      latestStatusMap = {};
+      activeList.forEach(s => latestStatusMap[s.flight_id] = s);
+
+      document.getElementById('conn-dot').className = 'conn-dot conn-ok';
+      document.getElementById('conn-text').textContent = 'Simülatör aktif — port 8001';
+
+      allFlightsDB.forEach(f => {
+        const sim = latestStatusMap[f.id];
+        const isRunning = sim && sim.status === 'running';
+        const isLanded = sim && sim.status === 'landed';
+
+        // Uçak rengini ve iconu güncelle (Trippin / North'a bakma sorununu burada çözüyoruz)
+        if (flightLayers[f.id]) {
+          const layer = flightLayers[f.id];
+          const color = isLanded ? '#f59e0b' : (isRunning ? '#4f6ef7' : '#94a5a6');
+          layer.planeMarker.setIcon(createPlaneIcon(color, Math.round(layer.lastBearing)));
+        }
+      });
+
+      renderControls();
+    } catch(e) {
+      document.getElementById('conn-dot').className = 'conn-dot conn-err';
+      document.getElementById('conn-text').textContent = 'Bağlantı koptu';
+    }
+    await updatePlanePositions();
+  }
+
+  loadFlightRoutes();
+  poll();
+  setInterval(poll, 1000);
+  setInterval(loadFlightRoutes, 5000);
+</script>
+</body>
+</html>

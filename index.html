@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Harita - Çizim + Firebase</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Geoman (çizim) -->
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+
+    <style>
+        #map { height: 100vh; }
+        body { margin: 0; }
+        #loginBtn {
+            position: absolute; top: 10px; right: 10px;
+            z-index: 1000; padding: 8px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="loginBtn">Google ile Giriş</button>
+    <div id="map"></div>
+
+    <!-- FIREBASE (module) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+        // ***** KENDİ CONFIG'İNİ BURAYA YAPIŞTIR *****
+        const firebaseConfig = {
+        apiKey: "AIzaSyDfe9oUvwHgH2qFHL9A9m6nNREPZ7Z8uJc",
+        authDomain: "leaflet-c572a.firebaseapp.com",
+        projectId: "leaflet-c572a",
+        storageBucket: "leaflet-c572a.firebasestorage.app",
+        messagingSenderId: "595219721255",
+        appId: "1:595219721255:web:d29f7588219cd4572d7202"
+        };
+        // ********************************************
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        console.log("Firebase bağlandı");
+
+        let currentUser = null;
+        const provider = new GoogleAuthProvider();
+
+        // Giriş butonu
+        document.getElementById('loginBtn').addEventListener('click', function() {
+            signInWithPopup(auth, provider)
+                .then(function(result) {
+                    currentUser = result.user;
+                    console.log("Giriş başarılı! UID:", currentUser.uid);
+                    document.getElementById('loginBtn').textContent = currentUser.displayName + " ✓";
+                    loadDrawings();   // giriş yapınca kayıtlı çizimleri yükle
+                })
+                .catch(function(error) {
+                    console.log("Giriş hatası:", error.message);
+                });
+        });
+
+        // Çizimi Firestore'a kaydet
+        async function saveDrawing(geojson) {
+            if (!currentUser) {
+                console.log("Önce giriş yap!");
+                return;
+            }
+            try {
+                await addDoc(collection(db, "drawings"), {
+                    uid: currentUser.uid,
+                    geojson: JSON.stringify(geojson),
+                    createdAt: Date.now()
+                });
+                console.log("Çizim kaydedildi");
+            } catch (e) {
+                console.log("Kayıt hatası:", e.message);
+            }
+        }
+
+        // Kullanıcının kayıtlı çizimlerini çek ve haritaya bas
+        async function loadDrawings() {
+            if (!currentUser) return;
+            const q = query(collection(db, "drawings"), where("uid", "==", currentUser.uid));
+            const snapshot = await getDocs(q);
+            snapshot.forEach(function(doc) {
+                const geojson = JSON.parse(doc.data().geojson);
+                L.geoJSON(geojson).addTo(map);
+            });
+            console.log("Kayıtlı çizimler yüklendi");
+        }
+
+        // Harita kodunun erişmesi için dışarı köprüle
+        window.saveDrawing = saveDrawing;
+    </script>
+
+    <!-- HARİTA + ÇİZİM (normal script) -->
+    <script>
+        var map = L.map('map').setView([39.92, 32.85], 13);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        map.pm.addControls({
+            position: 'topleft',
+            drawMarker: true,      // nokta ✓
+            drawPolyline: true,    // çizgi ✓
+            drawPolygon: true,     // alan ✓
+            drawCircle: false,
+            drawCircleMarker: false,     // GeoJSON desteklemiyor, kapalı
+            drawRectangle: false,  // (rectangle aslında polygon'a çevrilir, açabilirsin)
+            editMode: true,
+            dragMode: true,
+            removalMode: true
+        });
+
+        // Kullanıcı çizim yapınca kaydet
+        map.on('pm:create', function(e) {
+            var geojson = e.layer.toGeoJSON();
+            console.log("Çizildi:", JSON.stringify(geojson));
+            window.saveDrawing(geojson);   // Firestore'a gönder
+        });
+    </script>
+
+</body>
+</html>

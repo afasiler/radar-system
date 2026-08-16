@@ -1,0 +1,175 @@
+/* 
+  Reset: browsers add default margin/padding to body.
+*/
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Phase 4: Planlama Paneli Açma Butonu (Yüzen Buton) */
+.open-panel-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+.open-panel-btn:hover {
+  transform: scale(1.1);
+}
+
+/* Planlama Paneli */
+.planning-panel {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  width: 280px;
+}
+
+.planning-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.planning-panel-header h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.planning-panel-header button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #999;
+}
+
+.planning-panel label {
+  display: block;
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 2px;
+}
+
+.planning-panel input {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.planning-panel button.map-btn {
+  background: #f39c12;
+  color: white;
+  border: none;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.planning-panel button.map-btn.active {
+  background: #e74c3c;
+  animation: pulse 1s infinite alternate;
+}
+
+.planning-panel button.submit-btn {
+  background: #2ecc71;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  width: 100%;
+  margin-top: 5px;
+}
+
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.02); }
+}
+
+/* ── Custom Range Slider ── */
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+
+input[type=range]:focus {
+  outline: none;
+}
+
+/* Track (Arka Plan) */
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.3);
+}
+
+/* Thumb (Yuvarlak Tutamaç) */
+input[type=range]::-webkit-slider-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -8px; /* Track'in ortasına hizala: (6px / 2) - (20px / 2) = -7px (göz kararı -8 daha iyi) */
+  box-shadow: 0 0 10px rgba(52, 152, 219, 0.6);
+  border: 2px solid #fff;
+  transition: transform 0.1s ease, background 0.2s;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: #2980b9;
+}
+
+/* Canlı Mod - Kırmızı Tema İçin Yardımcı Sınıf */
+input[type=range].live-mode::-webkit-slider-thumb {
+  background: #e74c3c;
+  box-shadow: 0 0 10px rgba(231, 76, 60, 0.6);
+}
+input[type=range].live-mode::-webkit-slider-thumb:hover {
+  background: #c0392b;
+}

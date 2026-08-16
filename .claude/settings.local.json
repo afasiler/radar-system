@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(pkill -f \"uvicorn simulator_service.simulator_main:app\")",
+      "Bash(./venv/bin/uvicorn main:app --port 8000 --reload)",
+      "Bash(./venv/bin/uvicorn simulator_service.simulator_main:app --port 8001 --reload)",
+      "Bash(npm run *)",
+      "Bash(lsof -nP -iTCP:8001 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:8001)",
+      "Bash(lsof -nP -iTCP:8000)",
+      "Bash(ps -p 12574 -o pid,ppid,etime,command)",
+      "Bash(kill 12574)",
+      "Bash(ps -p 12574 -o pid,command)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
+      "Bash(ps -p 12568 -o pid,ppid,etime,command)",
+      "Bash(kill 12568 12552)",
+      "Bash(ps -p 12568 -o pid)",
+      "Bash(pkill -f \"flight-tracker/node_modules/.bin/vite\")",
+      "Bash(curl -s http://localhost:8000/api/flights/history)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s http://localhost:8001/simulations/positions)",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}

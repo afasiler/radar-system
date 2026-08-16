@@ -1,0 +1,257 @@
+=============================================================
+  UÇUŞ TAKİP SİSTEMİ — KARAR VE ÇÖZÜM GÜNLÜĞÜ
+  Proje: Flight Tracker (React + FastAPI + PostGIS)
+  Tarih: Temmuz–Ağustos 2026
+=============================================================
+
+-------------------------------------------------------------
+BÖLÜM 1 — HARİTA VE FRONTEND (Phase 1–4)
+-------------------------------------------------------------
+
+PROBLEM: Uçak ikonu rota çizgisinin üzerinde durmuyor.
+  Semptom: Kalkış ve varış koordinatları doğruydu ama uçak
+           ikon, kesikli çizginin yanında ya da dışında
+           görünüyordu.
+  Neden: Leaflet, Polyline çizerken iki nokta arasında
+         matematiksel düz çizgi çizer. Uçak da bu iki
+         noktanın tam ortasına konulduğunda, Leaflet'in
+         projeksiyon hesabı yüzünden çizginin dışına düşüyordu.
+  KARAR ve ÇÖZÜM: Segmented Line (Bölünmüş Çizgi) yöntemi
+         benimsendi. Kalkış-varış arası N ara noktaya bölündü.
+         Polyline bu ara noktalardan geçirildi. Uçağın konumu
+         da bu ara noktalardan biri yapıldı. Böylece uçak her
+         zaman çizginin TAM üzerinde oldu.
+  Dosya: App.jsx → getSegmentedLine() fonksiyonu
+
+-------------------------------------------------------------
+BÖLÜM 2 — VERİTABANI (Phase 5)
+-------------------------------------------------------------
+
+PROBLEM: Hangi veritabanı kullanılacak?
+  Seçenekler: SQLite vs PostGIS
+  KARAR: PostGIS seçildi.
+  Gerekçe: Proje verileri (noktalar, rotalar) geometri
+           formatında. PostGIS LINESTRING, POINT tiplerini
+           ve SRID 4326 (WGS84) koordinat sistemini native
+           destekler.
+
+PROBLEM: PostGIS kurulumu nasıl yapılacak? (Mac kullanıcısı)
+  İlk deneme: Homebrew ile kurulum → sudo şifresi gerekti,
+              non-interactive shell'de çalışmadı.
+  KARAR: Docker Desktop kullanıldı.
+  Gerekçe: Docker bağımlılıkları izole eder, farklı makinelerde
+           tutarlı çalışır, üretime yakın yapı sağlar.
+  Çözüm: docker-compose.yml ile postgis/postgis:15-3.3 image'ı.
+         Container adı: flight_tracker_db
+
+PROBLEM: Koordinat sistemi uyumsuzluğu (Leaflet vs PostGIS).
+  Semptom: Uçuşlar yanlış konumda görünüyordu.
+  Neden: Leaflet [Lat, Lng] kullanırken PostGIS [Lng, Lat] bekler.
+  KARAR ve ÇÖZÜM: Backend'de dönüşümler merkezi olarak yapıldı.
+         Yazarken Lng/Lat, okurken Lat/Lng. Frontend değişmedi.
+
+VERİTABANI ŞEMASI:
+  flights tablosu:
+    - id            VARCHAR  PRIMARY KEY
+    - origin_name   VARCHAR
+    - dest_name     VARCHAR
+    - origin_geom   GEOMETRY(POINT, 4326)
+    - dest_geom     GEOMETRY(POINT, 4326)
+    - route_geom    GEOMETRY(LINESTRING, 4326)
+    - start_time    VARCHAR  (HH:MM formatı)
+
+  flight_positions tablosu (Telemetri Logları):
+    - id            SERIAL   PRIMARY KEY (otomatik artan)
+    - flight_id     VARCHAR  FOREIGN KEY → flights.id
+    - timestamp     INTEGER  (Unix timestamp, saniye)
+    - position_geom GEOMETRY(POINT, 4326)
+
+  Not: 1NF sağlandı. flight_positions → flights: 1-N ilişki.
+
+-------------------------------------------------------------
+BÖLÜM 3 — SİMÜLATÖR VE ZAMAN DİLİMİ (Phase 6)
+-------------------------------------------------------------
+
+PROBLEM: Simülatör hızı gerçekçi değildi.
+  İlk durum: Tüm rota 120 saniyede tamamlanıyordu.
+  KARAR ve ÇÖZÜM: Haversine formülü ile gerçek mesafe
+         hesaplandı. 900 km/h uçak hızı baz alındı.
+         Rota süresi = mesafe / 0.25 km/s.
+  Dosya: simulator.py → haversine() fonksiyonu
+
+PROBLEM: Slider geriye alındığında uçaklar varışta görünüyordu.
+  Kök Neden: Eski oturumdan kalan flight_positions kayıtları
+             dünün timestamp'leriyle DB'de duruyordu.
+             "Bugün 17:00" sorgusu dünün kayıtlarını buldu.
+  ÇÖZÜM 1: DELETE FROM flight_positions; (8372 kayıt silindi)
+  ÇÖZÜM 2: Backend'e "origin fallback" eklendi: Kayıt yoksa
+             uçağı kalkış noktasında göster.
+
+PROBLEM: Simülatör 17:40'ta başlamalı, öncesinde uçaklar
+         kalkışta beklemelidir.
+  KARAR ve ÇÖZÜM:
+    - FLIGHT_START_TS = bugün 17:40 (yerel saat).
+    - Bu zamandan önce → bekler, kayıt göndermez.
+    - Bu zamandan sonra → elapsed = now - FLIGHT_START_TS
+      hesaplanır, doğru adım (step_index) bulunur.
+    - Slider min = 17:00 olarak sabitlendi.
+
+-------------------------------------------------------------
+BÖLÜM 4 — GÜVENLİK VE DOĞRULAMA (Phase 7)
+-------------------------------------------------------------
+
+1. SQL Injection:
+   KARAR: SQLAlchemy ORM parameterized queries kullanır,
+          risk düşük. Ek olarak Flight ID regex ile kısıtlandı:
+          Sadece [A-Za-z0-9\-_], max 20 karakter.
+
+2. Geçersiz Koordinatlar:
+   KARAR: validate_coords() eklendi.
+          Lat: -90/+90, Lng: -180/+180 dışı → 422 hatası.
+
+3. Geçersiz Timestamp:
+   KARAR: validate_timestamp() eklendi.
+          Kabul: 1 hafta önce — 1 gün sonrası arası.
+
+4. Kalkış = Varış Noktası:
+   KARAR: origin == destination → 422 hatası.
+
+5. Bilinmeyen Flight ID (simülatörden):
+   KARAR: DB'de olmayan ID → sessizce atlanır.
+
+6. Sonsuz Büyüyen Veritabanı:
+   KARAR: APScheduler ile saatlik cleanup görevi.
+          24 saatten eski flight_positions silinir.
+
+7. CORS Kısıtlaması:
+   İlk: allow_origins=["*"] — herkese açık.
+   KARAR: allow_origins=["http://localhost:5173"]
+
+8. Batch Limiti:
+   KARAR: Simülatör endpointine max 100 konum/istek.
+
+-------------------------------------------------------------
+BÖLÜM 5 — UI / UX DÜZELTMELERİ
+-------------------------------------------------------------
+
+1. Uçak yön (bearing) hesabı:
+   Hata: Bearing hep kalkış→varış hesabıydı, hareket etse de.
+   Çözüm: Bearing = anlık konum → varış noktası.
+
+2. Uçuş durum göstergesi (renk):
+   - Sarı  : Kalkış Bekliyor (origin'e yakın)
+   - Yeşil : Uçuşta
+   - Gri   : Varışa İndi (destination'a yakın)
+   Bilgi panelinde renkli durum şeridi eklendi.
+
+3. Kalkış/Varış şehir adı:
+   Hata: "Belirtilmedi" yazıyordu.
+   Çözüm: Forma şehir/havalimanı adı alanı eklendi.
+
+4. Harita rengi:
+   Dark mode denendi → kullanıcı isteğiyle standart
+   OpenStreetMap haritasına geri dönüldü.
+
+5. Bireysel Slider:
+   Eklendi: Dropdown ile tek bir uçuş seçilip sadece onun
+   zamanında gezinilebilir. Diğerleri canlı modda kalır.
+
+-------------------------------------------------------------
+BÖLÜM 6 — HOCA MAİL YAZIŞMASI (Ağustos 2026)
+-------------------------------------------------------------
+
+Gönderilen soru:
+  "Simülatör hangi formatta veri gönderiyor?
+   Örnek paylaşabilir misiniz? Backend'i buna göre
+   düzenleyeceğim."
+
+Alınan yanıt (özet):
+  - Simülatörü biz yazabiliriz.
+  - Planlanmış uçuşları kendi backend'imizden çekeceğiz.
+  - Coğrafi düz (great circle) ile geometrik düzün
+    (düz lat/lng interpolasyonu) farkını gözetmeliyiz.
+  - Aynı uçuşu birden fazla simüle etmemek gerekiyor.
+  - Simülatörün küçük bir frontend'i olacak.
+  - Tasarım kararları haftaya tartışılacak.
+
+SONRAKI ADIM:
+  Great circle routing kullanan, tekrar önleme mekanizmalı
+  ve kontrol frontendi olan gelişmiş simülatörün
+  tasarımı ve kodlanması.
+
+=============================================================
+  TEKNOLOJİ YIĞINI
+=============================================================
+  Frontend   : React (Vite), Leaflet (react-leaflet), CSS
+  Backend    : Python, FastAPI, Uvicorn, SQLAlchemy,
+               GeoAlchemy2, APScheduler
+  Veritabanı : PostgreSQL 15 + PostGIS 3.3 (Docker)
+  Simülatör  : Python (requests, math, datetime)
+  Container  : Docker Desktop (Mac)
+
+  Portlar:
+    Frontend  → http://localhost:5173
+    Backend   → http://localhost:8000
+    Simülatör → http://localhost:8001  (yeni)
+    PostgreSQL→ localhost:5432
+
+=============================================================
+  DOSYA YAPISI
+=============================================================
+  /Desktop/leaflet/
+  ├── flight-tracker/
+  │   └── src/
+  │       ├── App.jsx        ← React kodu (harita, slider, form)
+  │       └── index.css      ← Stiller
+  └── backend/
+      ├── main.py            ← FastAPI + validasyon
+      ├── models.py          ← SQLAlchemy tabloları
+      ├── schemas.py         ← Pydantic şemaları
+      ├── database.py        ← DB bağlantısı
+      ├── simulator.py       ← Telemetri simülatörü
+      └── docker-compose.yml ← PostGIS container
+
+=============================================================
+
+-------------------------------------------------------------
+BÖLÜM 7 — GELİŞMİŞ SİMÜLATÖR (Ağustos 2026, 2. Hafta)
+-------------------------------------------------------------
+
+KARAR: Simülatör bağımsız bir FastAPI servisi olarak yazıldı.
+  Port: 8001 (Ana backend 8000'den ayrı)
+  Gerekçe: Hocanın "bağımsız simülatör" ifadesi. Mimari
+           ayrımı sayesinde ilerleyen haftalarda hocaların
+           kendi simülatörü bizimkinin yerine takılabilir.
+
+KARAR: Great Circle (Coğrafi Yay) Routing
+  Yöntem: Spherical Linear Interpolation (SLERP)
+  Gerekçe: Hocanın "coğrafi düz ile geometrik düzün farkını
+           dikkate al" uyarısına doğrudan yanıt.
+  Not: Kısa mesafelerde (<500 km) fark küçüktür.
+       Uzun mesafelerde (örn. İstanbul→Tokyo) anlamlı fark
+       oluşur ve yay belirginleşir.
+  Dosya: great_circle.py → great_circle_points() (SLERP)
+
+KARAR: Tekrar Önleme (Duplicate Prevention)
+  Yöntem: _simulations dict + status kontrolü.
+          Aynı flight_id için status="running" ise yeni
+          thread başlatılmaz, "skipped" listesine eklenir.
+
+KARAR: Hız Modları → 1x / 10x / 50x
+  1x : Gerçek hız (~900 km/h). İstanbul-Ankara ~23 dk.
+  10x: 10 kat hızlı, ~2.3 dk. Kısa testler için.
+       Slider'da ~23 dakikalık değişimi görmek için ideal.
+  50x: Demo modu, ~28 saniye. Sunum için.
+
+KARAR: İniş Sonrası Davranış
+  - Uçak indikten 5 dakika sonra frontend listesinden kaybolur.
+  - Veritabanındaki flight_positions kayıtları silinmez.
+  - Gerekçe: İleride inmiş uçuşlarla analiz yapılmak istenebilir.
+
+YENİ DOSYALAR:
+  backend/simulator_service/
+  ├── great_circle.py       ← SLERP great circle hesabı
+  ├── simulation_engine.py  ← Motor (thread, dedup, zamanlama)
+  ├── simulator_main.py     ← FastAPI port 8001
+  └── sim_frontend/
+      └── index.html        ← Kontrol paneli
