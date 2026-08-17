@@ -1,0 +1,6 @@
+INFO:     Will watch for changes in these directories: ['/Users/afasiler/Desktop/leaflet/backend/simulator_service']
+INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [5911] using WatchFiles
+INFO:     Started server process [5913]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
